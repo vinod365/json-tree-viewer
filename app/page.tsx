@@ -1,65 +1,166 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { buildNodesEdges } from "@/lib/buildNodesEdges";
+import { parseJsonPath } from "@/lib/parseJsonPath";
+import { useJsonFlow } from "@/hooks/useJsonFlow";
+import Header from "@/components/header";
+import JsonInputPanel from "@/components/jsonInputPanel";
+import FlowCanvas from "@/components/flowCanvas";
+import Footer from "@/components/footer";
+
+export default function App() {
+  const {
+    jsonText,
+    setJsonText,
+    error,
+    setError,
+    nodes,
+    setNodes,
+    edges,
+    setEdges,
+    rfInstance,
+    setRfInstance,
+    searchTerm,
+    setSearchTerm,
+    message,
+    setMessage,
+    dark,
+    setDark,
+    reactFlowWrapper,
+    onNodesChange,
+    onEdgesChange,
+    onConnect,
+  } = useJsonFlow();
+
+  const handleVisualize = () => {
+    setMessage("");
+    try {
+      const parsed = JSON.parse(jsonText);
+      setError("");
+      const { nodes: builtNodes, edges: builtEdges } = buildNodesEdges(parsed);
+      setNodes(builtNodes);
+      setEdges(builtEdges);
+      setTimeout(() => rfInstance?.fitView({ padding: 0.2 }), 100);
+    } catch (err) {
+      setError((err as Error)?.message ?? String(err));
+      setNodes([]);
+      setEdges([]);
+    }
+  };
+
+  const handleFormat = () => {
+    try {
+      setJsonText(JSON.stringify(JSON.parse(jsonText), null, 2));
+      setMessage("Formatted");
+    } catch {
+      setError("Invalid JSON");
+    }
+  };
+
+  const handleSearch = () => {
+    setMessage("");
+    const tokens = parseJsonPath(searchTerm);
+    if (!tokens) return setMessage("No match found");
+    let cur = "root";
+    tokens.forEach(
+      (t) =>
+        (cur =
+          typeof t === "number"
+            ? `${cur}.${t}`
+            : cur === "root"
+            ? `${t}`
+            : `${cur}.${t}`)
+    );
+    const match = nodes.find((n) => n.id === cur);
+    if (match) {
+      setNodes((nds) =>
+        nds.map((n) => ({
+          ...n,
+          style: {
+            ...n.style,
+            boxShadow:
+              n.id === cur
+                ? "0 0 16px 5px rgba(99,102,241,0.7)"
+                : n.style?.boxShadow,
+          },
+        }))
+      );
+      rfInstance?.setCenter(match.position.x + 120, match.position.y + 40, {
+        duration: 500,
+      });
+      setMessage("Match found");
+    } else setMessage("No match found");
+  };
+
+  const handleCopyPath = (path: string) => {
+    navigator.clipboard
+      ?.writeText(path)
+      .then(() => setMessage(`Copied ${path}`))
+      .catch(() => setMessage("Copy failed"));
+  };
+
+  const handleClear = () => {
+    setJsonText("");
+    setNodes([]);
+    setEdges([]);
+    setError("");
+    setMessage("");
+  };
+
+  const downloadImage = async () => {
+    const html2canvas = (await import("html2canvas")) as any;
+    if (!reactFlowWrapper.current) return;
+    const canvas = await html2canvas.default(reactFlowWrapper.current);
+    const url = canvas.toDataURL("image/png");
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "json-tree.png";
+    a.click();
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <div
+      className={`min-h-screen sm:p-6 p-2 transition-colors duration-300 ${
+        dark ? "bg-gray-900 text-white" : "bg-gray-50 text-gray-800"
+      }`}
+    >
+      <div className="max-w-7xl mx-auto container">
+        <Header
+          dark={dark}
+          setDark={setDark}
+          jsonText={jsonText}
+          setMessage={setMessage}
+          handleClear={handleClear}
+          downloadImage={downloadImage}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+
+        <main className="grid sm:grid-cols-3 grid-cols-2 gap-5">
+          <JsonInputPanel
+            jsonText={jsonText}
+            setJsonText={setJsonText}
+            handleVisualize={handleVisualize}
+            handleFormat={handleFormat}
+            error={error}
+            searchTerm={searchTerm}
+            setSearchTerm={setSearchTerm}
+            handleSearch={handleSearch}
+            message={message}
+          />
+          <FlowCanvas
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onConnect={onConnect}
+            dark={dark}
+            reactFlowWrapper={reactFlowWrapper}
+            setRfInstance={setRfInstance}
+            handleCopyPath={handleCopyPath}
+          />
+        </main>
+
+        <Footer />
+      </div>
     </div>
   );
 }
